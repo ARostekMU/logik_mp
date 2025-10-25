@@ -9,8 +9,10 @@ struct cRGB led[4];
 
 static inline void initADC5(void) {
     ADMUX |= (1 << REFS0);                                              /* reference voltage on AVCC */
+    ADMUX = (ADMUX & 0xF0) | (ADC_CH & 0x0F);                           /* Select channel ADC5 */
     ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0);  /* ADC clock prescaler /128 */
     ADCSRA |= (1 << ADEN);                                              /* enable ADC */
+    //DIDR0 = (1 << ADC5D);                                               /* Disable digital input on ADC5 */
 }
 
 int main(void) {
