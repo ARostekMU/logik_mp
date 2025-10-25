@@ -9,10 +9,10 @@ struct cRGB led[4];
 
 static inline void initADC5(void) {
     ADMUX |= (1 << REFS0);                                              /* reference voltage on AVCC */
-    ADMUX = (ADMUX & 0xF0) | (ADC_CH & 0x0F);                           /* Select channel ADC5 */
+    ADMUX = (ADMUX & 0xF0) | (5 & 0x0F);                                /* Select channel ADC5 */
     ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0);  /* ADC clock prescaler /128 */
     ADCSRA |= (1 << ADEN);                                              /* enable ADC */
-    //DIDR0 = (1 << ADC5D);                                               /* Disable digital input on ADC5 */
+    //DIDR0 = (1 << ADC5D);                                             /* Disable digital input on ADC5 */
 }
 
 int main(void) {
@@ -31,7 +31,25 @@ int main(void) {
         adcValue = ADC;                                     /* read ADC in */
         ledValue = (adcValue >> 2); // from 1024 to 256 range
 
-        led[0].r=ledValue;    // LED intensity red
+        if (ledValue < 42) {
+            led[0].r=80,led[0].g=0,led[0].b=0;
+        }
+        else if (ledValue < 85) {
+            led[0].r=0,led[0].g=80,led[0].b=0;
+        }
+        else if (ledValue < 128) {
+            led[0].r=0,led[0].g=0,led[0].b=80;
+        }
+        else if (ledValue < 170) {
+            led[0].r=40,led[0].g=40,led[0].b=0;
+        }
+        else if (ledValue < 213) {
+            led[0].r=0,led[0].g=40,led[0].b=40;
+        }
+        else {
+            led[0].r=40,led[0].g=0,led[0].b=40;
+        }
+
         ws2812_setleds(led, NUM_LEDS);
 
         _delay_ms(50);
