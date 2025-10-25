@@ -1,3 +1,3 @@
 # Logik Multiplayer
 
-This repository contains the Logik Multiplayer Game source code intended to run on ATMEGA328P.
+This repository contains the Logik Multiplayer game source code intended to run on ATMEGA328P.
