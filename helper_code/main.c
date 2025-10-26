@@ -35,6 +35,8 @@ uint8_t player_1_led_color;
 uint8_t player_2_led_position;
 uint8_t player_2_led_color;
 
+static uint8_t blink_on = 0;
+
 static inline void init_adc(void) {
     ADMUX |= (1 << REFS0) | (1 << ADLAR);                   // reference voltage on AVCC, ADC reads only 8 bits
     ADCSRA  = (1 << ADEN)                                   // enable ADC
@@ -85,10 +87,24 @@ int main(void) {
     while(1) {
         update_player_selections();
 
-        ws2812_setleds(led, NUM_LEDS);
-
         update_color_codes();
 
+        if (blink_on) {
+            led[player_1_led_position] = palette[player_1_led_color];
+            led[player_2_led_position] = palette[player_2_led_color];
+        } else {
+            led[player_1_led_position] = palette[COLOR_BLACK];
+            led[player_2_led_position] = palette[COLOR_BLACK];
+        }
+
+        ws2812_setleds(led, NUM_LEDS);
+
         _delay_ms(50);
+
+        static uint8_t frame_counter = 0;
+
+        frame_counter++;
+        if (frame_counter >= 20) frame_counter = 0;   // 0..19
+        blink_on = (frame_counter >= 4);  // 0..3 => 0 (off), 4..19 => 1 (on)
     }
 }
