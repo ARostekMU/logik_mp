@@ -184,24 +184,24 @@ static inline uint8_t both_players_locked_row(void) {
 }
 
 static void commit_and_score_turn(void) {
-    /* Identity mapping: slot 0..3 -> column 0..3 (scoring order) */
-    for (uint8_t col = 0; col < 4; col++) {
-        boards[0].turns[current_turn].guess[col] = p1_sel_color[col];
-        boards[1].turns[current_turn].guess[col] = p2_sel_color[col];
+    /* === Store guesses in canonical column order (0..3 from P1 perspective) ===
+     * P1: slot s -> col s
+     * P2: slot s -> col (3 - s)  [mirror]
+     */
+    for (uint8_t s = 0; s < 4; s++) {
+        boards[0].turns[current_turn].guess[s] = p1_sel_color[s];
+        uint8_t col1 = (CODE_LEN - 1) - s;  // mirror P2 slots into canonical columns
+        boards[1].turns[current_turn].guess[col1] = p2_sel_color[s];
     }
 
-    /* ---- DISPLAY writing (mirror P2) ----
-     * Player 1: show col 0..3 in the same order.
-     * Player 2: show col 0..3 mirrored as 3..0 so the opponent reads it naturally.
+    /* === After commit, write both rows to guess LEDs in canonical column order ===
+     * (No extra mirroring here; ledmap[1] should already represent columns 0..3
+     *  in the board's canonical left->right.)
      */
     for (uint8_t col = 0; col < 4; col++) {
-        // P1 display
         uint8_t idx0 = ledmap[0].guess_led[current_turn][col];
+        uint8_t idx1 = ledmap[1].guess_led[current_turn][col];
         led_color_codes[idx0] = boards[0].turns[current_turn].guess[col];
-
-        // P2 display (MIRRORED)
-        uint8_t disp_col1 = (CODE_LEN - 1) - col;               // 3 - col
-        uint8_t idx1 = ledmap[1].guess_led[current_turn][disp_col1];
         led_color_codes[idx1] = boards[1].turns[current_turn].guess[col];
     }
 
@@ -263,6 +263,8 @@ static inline void init_ledmap(void) {
 
     for (uint8_t r = 0; r < 6; r++) {
         uint8_t base = 97 - (uint8_t)(16 * r);
+        // Columns 0..3 should represent the same canonical left->right as P1,
+        // but on Player 2's physical row these indices will appear mirrored to them.
         ledmap[1].guess_led[r][0] = base - 4;
         ledmap[1].guess_led[r][1] = base - 5;
         ledmap[1].guess_led[r][2] = base - 6;
@@ -330,7 +332,7 @@ int main(void) {
                 blink_on ? palette_bright[player_1_live_color]
                          : palette[player_1_live_color];
 
-            // Player 2 selection LEDs
+            // Player 2 selection LEDs (display only)
             for (uint8_t s = 0; s < 4; s++) {
                 uint8_t idx = select_led[1][s];
                 led[idx] = player_2_locked_leds[s] ? palette[p2_sel_color[s]]
@@ -339,23 +341,6 @@ int main(void) {
             led[ select_led[1][player_2_slot] ] =
                 blink_on ? palette_bright[player_2_live_color]
                          : palette[player_2_live_color];
-
-            // --- Live preview of current row on guess LEDs ---
-            // P1: direct (0..3)
-            for (uint8_t c = 0; c < 4; c++) {
-                if (player_1_locked_leds[c]) {
-                    uint8_t idx0 = ledmap[0].guess_led[current_turn][c];
-                    led[idx0] = palette[p1_sel_color[c]];
-                }
-            }
-            // P2: MIRRORED (3 - c)
-            for (uint8_t c = 0; c < 4; c++) {
-                if (player_2_locked_leds[c]) {
-                    uint8_t disp_c = (CODE_LEN - 1) - c; // 3 - c
-                    uint8_t idx1 = ledmap[1].guess_led[current_turn][disp_c];
-                    led[idx1] = palette[p2_sel_color[c]];
-                }
-            }
         } else {
             uint8_t blink_p0 = (game_state == GS_P1_WIN) || (game_state == GS_DRAW && draw_winning);
             uint8_t blink_p1 = (game_state == GS_P2_WIN) || (game_state == GS_DRAW && draw_winning);
