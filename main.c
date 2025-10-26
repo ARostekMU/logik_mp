@@ -18,12 +18,12 @@ enum Color {
 
 static const struct cRGB palette[COLOR_COUNT+1] = {
     {0, 0, 0},      // black
-    {80, 0, 0},     // red
-    {0, 80, 0},     // green
-    {0, 0, 80},     // blue
-    {40, 40, 0},    // yellow
-    {0, 40, 40},    // cyan
-    {40, 0, 40},    // magenta
+    {40, 0, 0},     // red
+    {0, 40, 0},     // green
+    {0, 0, 40},     // blue
+    {20, 20, 0},    // yellow
+    {0, 20, 20},    // cyan
+    {20, 0, 20},    // magenta
 };
 
 struct cRGB led[NUM_LEDS];
