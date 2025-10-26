@@ -1,7 +1,7 @@
 #define F_CPU 16000000UL
 #include <util/delay.h>
 #include <avr/io.h>
-#include <avr/eeprom.h>      // <-- added for EEPROM boot counter
+#include <avr/eeprom.h>      // for EEPROM boot counter
 #include "light_ws2812.h"
 
 #define NUM_LEDS 104
@@ -73,7 +73,7 @@ static const struct cRGB palette_bright[COLOR_COUNT+1] = {
     WS2812_COLOR(30,0, 30),  // MAGENTA
 };
 
-/* Eval peg colors (after GRB fix these look correct) */
+/* Eval peg colors */
 #define EVAL_POS_COLOR  COLOR_RED      // exact position -> red
 #define EVAL_COL_COLOR  COLOR_YELLOW   // color-only     -> yellow
 
@@ -360,22 +360,37 @@ int main(void) {
             led[ select_led[1][player_2_slot] ] =
                 blink_on ? palette_bright[player_2_live_color]
                          : palette[player_2_live_color];
-        } else {
-            uint8_t blink_p0 = (game_state == GS_P1_WIN) || (game_state == GS_DRAW && draw_winning);
-            uint8_t blink_p1 = (game_state == GS_P2_WIN) || (game_state == GS_DRAW && draw_winning);
 
-            if (blink_p0) {
+        } else {
+            uint8_t losing_draw = (game_state == GS_DRAW) && !draw_winning;
+
+            if (losing_draw) {
+                /* Show the correct secret on both players' selection LEDs */
                 for (uint8_t c = 0; c < 4; c++) {
-                    uint8_t idx = select_led[0][c];
-                    uint8_t col = p1_sel_color[c];
-                    led[idx] = blink_on ? palette_bright[col] : palette[COLOR_BLACK];
+                    uint8_t col = secret[c];
+                    uint8_t idx0 = select_led[0][c];
+                    uint8_t idx1 = select_led[1][c];
+                    led[idx0] = palette_bright[col];
+                    led[idx1] = palette_bright[col];
                 }
-            }
-            if (blink_p1) {
-                for (uint8_t c = 0; c < 4; c++) {
-                    uint8_t idx = select_led[1][c];
-                    uint8_t col = p2_sel_color[c];
-                    led[idx] = blink_on ? palette_bright[col] : palette[COLOR_BLACK];
+            } else {
+                /* Blink winners (or both if winning draw) */
+                uint8_t blink_p0 = (game_state == GS_P1_WIN) || (game_state == GS_DRAW && draw_winning);
+                uint8_t blink_p1 = (game_state == GS_P2_WIN) || (game_state == GS_DRAW && draw_winning);
+
+                if (blink_p0) {
+                    for (uint8_t c = 0; c < 4; c++) {
+                        uint8_t idx = select_led[0][c];
+                        uint8_t col = p1_sel_color[c];
+                        led[idx] = blink_on ? palette_bright[col] : palette[COLOR_BLACK];
+                    }
+                }
+                if (blink_p1) {
+                    for (uint8_t c = 0; c < 4; c++) {
+                        uint8_t idx = select_led[1][c];
+                        uint8_t col = p2_sel_color[c];
+                        led[idx] = blink_on ? palette_bright[col] : palette[COLOR_BLACK];
+                    }
                 }
             }
         }
