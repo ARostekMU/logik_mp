@@ -339,6 +339,23 @@ int main(void) {
             led[ select_led[1][player_2_slot] ] =
                 blink_on ? palette_bright[player_2_live_color]
                          : palette[player_2_live_color];
+
+            // --- Live preview of current row on guess LEDs ---
+            // P1: direct (0..3)
+            for (uint8_t c = 0; c < 4; c++) {
+                if (player_1_locked_leds[c]) {
+                    uint8_t idx0 = ledmap[0].guess_led[current_turn][c];
+                    led[idx0] = palette[p1_sel_color[c]];
+                }
+            }
+            // P2: MIRRORED (3 - c)
+            for (uint8_t c = 0; c < 4; c++) {
+                if (player_2_locked_leds[c]) {
+                    uint8_t disp_c = (CODE_LEN - 1) - c; // 3 - c
+                    uint8_t idx1 = ledmap[1].guess_led[current_turn][disp_c];
+                    led[idx1] = palette[p2_sel_color[c]];
+                }
+            }
         } else {
             uint8_t blink_p0 = (game_state == GS_P1_WIN) || (game_state == GS_DRAW && draw_winning);
             uint8_t blink_p1 = (game_state == GS_P2_WIN) || (game_state == GS_DRAW && draw_winning);
