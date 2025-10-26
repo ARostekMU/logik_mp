@@ -16,24 +16,36 @@ enum Color {
     COLOR_MAGENTA,
 };
 
+// Dim palette (default look, lower brightness)
 static const struct cRGB palette[COLOR_COUNT+1] = {
     {0, 0, 0},      // black
-    {40, 0, 0},     // red
-    {0, 40, 0},     // green
-    {0, 0, 40},     // blue
-    {20, 20, 0},    // yellow
-    {0, 20, 20},    // cyan
-    {20, 0, 20},    // magenta
+    {20, 0, 0},     // red (dim)
+    {0, 20, 0},     // green (dim)
+    {0, 0, 20},     // blue (dim)
+    {10, 10, 0},    // yellow (dim)
+    {0, 10, 10},    // cyan (dim)
+    {10, 0, 10},    // magenta (dim)
+};
+
+// Bright palette (cursor highlight & locked-under-cursor, ~sum ≈ 40)
+static const struct cRGB palette_bright[COLOR_COUNT+1] = {
+    {0, 0, 0},      // black
+    {40, 0, 0},     // red (bright)
+    {0, 40, 0},     // green (bright)
+    {0, 0, 40},     // blue (bright)
+    {20, 20, 0},    // yellow (bright)
+    {0, 20, 20},    // cyan (bright)
+    {20, 0, 20},    // magenta (bright)
 };
 
 struct cRGB led[NUM_LEDS];
 uint8_t led_color_codes[NUM_LEDS];
 
 uint8_t player_1_led_position;
-uint8_t player_1_led_color;
+uint8_t player_1_live_color;   // <-- NEW: live color from ADC for P1
 
 uint8_t player_2_led_position;
-uint8_t player_2_led_color;
+uint8_t player_2_live_color;   // <-- NEW: live color from ADC for P2
 
 uint8_t player_1_locked_leds[4];
 uint8_t player_2_locked_leds[4];
@@ -60,20 +72,17 @@ static inline uint8_t bucket_floor(uint8_t v, uint8_t n) {
 }
 
 static inline void update_player_selections(void) {
+    // Positions
     player_1_led_position = bucket_floor(read_adc_channel(2), 4);
-    if (!player_1_locked_leds[player_1_led_position]) {
-        player_1_led_color = bucket_floor(read_adc_channel(3), COLOR_COUNT) + 1;
-        led_color_codes[player_1_led_position] = player_1_led_color;
-    }
-    
     player_2_led_position = bucket_floor(read_adc_channel(4), 4) + 100;
-    if (!player_2_locked_leds[player_2_led_position - 100]) {
-        player_2_led_color = bucket_floor(read_adc_channel(5), COLOR_COUNT) + 1;
-        led_color_codes[player_2_led_position] = player_2_led_color;
-    }
+
+    // Live (preview) colors from ADC (do NOT write to led_color_codes here)
+    player_1_live_color = bucket_floor(read_adc_channel(3), COLOR_COUNT) + 1;
+    player_2_live_color = bucket_floor(read_adc_channel(5), COLOR_COUNT) + 1;
 }
 
 static inline void update_color_codes(void) {
+    // Base fill: DIM stored colors everywhere
     for (uint8_t i = 0; i < NUM_LEDS; i++) {
         led[i] = palette[led_color_codes[i]];
     }
@@ -118,11 +127,14 @@ int main(void) {
         uint8_t p1_pressed = !(PIND & (1 << PD6));
         uint8_t p2_pressed = !(PIND & (1 << PD1));
 
+        // Lock action: commit live color to stored code
         if (p1_pressed) {
             player_1_locked_leds[player_1_led_position] = 1;
+            led_color_codes[player_1_led_position] = player_1_live_color;   // commit on lock
         }
         if (p2_pressed) {
             player_2_locked_leds[player_2_led_position - 100] = 1;
+            led_color_codes[player_2_led_position] = player_2_live_color;   // commit on lock
         }
 
         if (evaluate_turn()) {
@@ -140,21 +152,29 @@ int main(void) {
             }
         }
 
-        update_color_codes();
+        update_color_codes(); // base DIM fill from stored codes
 
         // compute lock flags for the *current cursor positions*
         uint8_t p1_locked_here = player_1_locked_leds[player_1_led_position];
         uint8_t p2_locked_here = player_2_locked_leds[player_2_led_position - 100];
 
-        // only overlay blink on *unlocked* slots
-        if (!p1_locked_here) {
+        // Overlay for Player 1 cursor position
+        if (p1_locked_here) {
+            // locked under cursor: steady BRIGHT stored color
+            led[player_1_led_position] = palette_bright[ led_color_codes[player_1_led_position] ];
+        } else {
+            // not locked: BLINK BRIGHT with live color vs black
             led[player_1_led_position] = blink_on
-                ? palette[player_1_led_color]
+                ? palette_bright[player_1_live_color]
                 : palette[COLOR_BLACK];
         }
-        if (!p2_locked_here) {
+
+        // Overlay for Player 2 cursor position
+        if (p2_locked_here) {
+            led[player_2_led_position] = palette_bright[ led_color_codes[player_2_led_position] ];
+        } else {
             led[player_2_led_position] = blink_on
-                ? palette[player_2_led_color]
+                ? palette_bright[player_2_live_color]
                 : palette[COLOR_BLACK];
         }
 
