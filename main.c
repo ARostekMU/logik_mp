@@ -65,10 +65,10 @@ uint8_t player_1_locked_leds[4];
 uint8_t player_2_locked_leds[4];
 static uint8_t blink_on = 0;
 
-// Selection LEDs
+// Selection LED order (reversed)
 static const uint8_t select_led[N_PLAYERS][CODE_LEN] = {
-    {0, 1, 2, 3},          // Player 1
-    {100, 101, 102, 103}   // Player 2
+    {3, 2, 1, 0},          // Player 1 reversed
+    {103, 102, 101, 100}   // Player 2 reversed
 };
 static uint8_t p1_sel_color[4];
 static uint8_t p2_sel_color[4];
@@ -182,17 +182,11 @@ static void commit_and_score_turn(void) {
     uint8_t p0_win = (boards[0].turns[current_turn].n_pos == CODE_LEN);
     uint8_t p1_win = (boards[1].turns[current_turn].n_pos == CODE_LEN);
 
-    if (p0_win && p1_win) {
-        game_state = GS_DRAW; draw_winning = 1;
-    } else if (p0_win) {
-        game_state = GS_P1_WIN;
-    } else if (p1_win) {
-        game_state = GS_P2_WIN;
-    } else if (current_turn == (N_TURNS - 1)) {
-        game_state = GS_DRAW;
-    } else {
-        game_state = GS_PLAYING;
-    }
+    if (p0_win && p1_win) { game_state = GS_DRAW; draw_winning = 1; }
+    else if (p0_win) game_state = GS_P1_WIN;
+    else if (p1_win) game_state = GS_P2_WIN;
+    else if (current_turn == (N_TURNS - 1)) game_state = GS_DRAW;
+    else game_state = GS_PLAYING;
 }
 
 static inline void render_evaluations(void) {
@@ -292,26 +286,30 @@ int main(void) {
         render_evaluations();
 
         if (game_state == GS_PLAYING) {
+            // --- Player 1 selection LEDs ---
             for (uint8_t c = 0; c < 4; c++) {
-                led[ select_led[0][c] ] = palette[COLOR_BLACK];
-                led[ select_led[1][c] ] = palette[COLOR_BLACK];
-            }
-
-            for (uint8_t c = 0; c < 4; c++) {
+                uint8_t idx = select_led[0][c];
                 if (player_1_locked_leds[c])
-                    led[ select_led[0][c] ] = palette_bright[ p1_sel_color[c] ];
+                    led[idx] = palette[p1_sel_color[c]]; // dim locked ones
+                else
+                    led[idx] = palette[COLOR_BLACK];
             }
-            if (!player_1_locked_leds[player_1_slot])
-                led[ select_led[0][player_1_slot] ] = blink_on ? palette_bright[player_1_live_color]
-                                                               : palette[COLOR_BLACK];
+            // current slot bright/blinking
+            led[ select_led[0][player_1_slot] ] =
+                blink_on ? palette_bright[player_1_live_color]
+                         : palette[player_1_live_color];
 
+            // --- Player 2 selection LEDs ---
             for (uint8_t c = 0; c < 4; c++) {
+                uint8_t idx = select_led[1][c];
                 if (player_2_locked_leds[c])
-                    led[ select_led[1][c] ] = palette_bright[ p2_sel_color[c] ];
+                    led[idx] = palette[p2_sel_color[c]];
+                else
+                    led[idx] = palette[COLOR_BLACK];
             }
-            if (!player_2_locked_leds[player_2_slot])
-                led[ select_led[1][player_2_slot] ] = blink_on ? palette_bright[player_2_live_color]
-                                                               : palette[COLOR_BLACK];
+            led[ select_led[1][player_2_slot] ] =
+                blink_on ? palette_bright[player_2_live_color]
+                         : palette[player_2_live_color];
         } else {
             uint8_t blink_p0 = (game_state == GS_P1_WIN) || (game_state == GS_DRAW && draw_winning);
             uint8_t blink_p1 = (game_state == GS_P2_WIN) || (game_state == GS_DRAW && draw_winning);
