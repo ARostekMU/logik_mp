@@ -1,6 +1,7 @@
 #define F_CPU 16000000UL
 #include <util/delay.h>
 #include <avr/io.h>
+#include <avr/eeprom.h>      // for EEPROM boot counter
 #include "light_ws2812.h"
 
 #define NUM_LEDS 104
@@ -94,6 +95,33 @@ static const uint8_t select_led[N_PLAYERS][CODE_LEN] = {
 static uint8_t p1_sel_color[4];
 static uint8_t p2_sel_color[4];
 
+/* -------------------- RNG (EEPROM-seeded LCG) -------------------- */
+/* Guarantees different secret on each boot without using ADC. */
+static uint32_t EEMEM ee_boot_counter = 0;   // persists across resets
+static uint32_t lcg_state = 1;
+
+static inline void lcg_seed(uint32_t seed) { lcg_state = seed ? seed : 1; }
+static inline uint16_t lcg16(void) {
+    lcg_state = 1664525UL * lcg_state + 1013904223UL;
+    return (uint16_t)(lcg_state >> 16);
+}
+
+static uint32_t make_seed(void) {
+    uint32_t counter = eeprom_read_dword(&ee_boot_counter);
+    eeprom_update_dword(&ee_boot_counter, counter + 1);    // one write per boot
+    uint32_t s = (counter + 1) ^ 0x9E3779B9UL;             // mix with golden-ratio constant
+    s ^= (uint32_t)MCUSR << 24;                            // fold in reset cause
+    MCUSR = 0;                                             // clear it
+    return s ? s : 0xA5A5A5A5UL;
+}
+
+static void generate_secret_random(uint8_t out[CODE_LEN]) {
+    lcg_seed(make_seed());
+    for (uint8_t i = 0; i < CODE_LEN; ++i) {
+        out[i] = (lcg16() % 6) + 1;  // values 1..6 inclusive, repeats allowed
+    }
+}
+
 /* -------------------- ADC -------------------- */
 static inline void init_adc(void) {
     ADMUX |= (1 << REFS0) | (1 << ADLAR);
@@ -151,8 +179,8 @@ static inline void init_board_state(void) {
         }
     }
 
-    // Secret: R=1, G=2, B=3, Y=4
-    secret[0] = 1; secret[1] = 2; secret[2] = 3; secret[3] = 4;
+    /* Generate a fresh random secret: values 1..6, repeats allowed */
+    generate_secret_random(secret);
 
     for (uint8_t i = 0; i < 4; i++) {
         player_1_locked_leds[i] = 0;
@@ -286,7 +314,7 @@ int main(void) {
 
     init_ledmap();
     init_adc();
-    init_board_state();
+    init_board_state();   // now generates a new random secret each boot
 
     while (1) {
         update_player_selections();
@@ -341,22 +369,37 @@ int main(void) {
             led[ select_led[1][player_2_slot] ] =
                 blink_on ? palette_bright[player_2_live_color]
                          : palette[player_2_live_color];
-        } else {
-            uint8_t blink_p0 = (game_state == GS_P1_WIN) || (game_state == GS_DRAW && draw_winning);
-            uint8_t blink_p1 = (game_state == GS_P2_WIN) || (game_state == GS_DRAW && draw_winning);
 
-            if (blink_p0) {
+        } else {
+            uint8_t losing_draw = (game_state == GS_DRAW) && !draw_winning;
+
+            if (losing_draw) {
+                /* Show the correct secret on both players' selection LEDs */
                 for (uint8_t c = 0; c < 4; c++) {
-                    uint8_t idx = select_led[0][c];
-                    uint8_t col = p1_sel_color[c];
-                    led[idx] = blink_on ? palette_bright[col] : palette[COLOR_BLACK];
+                    uint8_t col = secret[c];
+                    uint8_t idx0 = select_led[0][c];
+                    uint8_t idx1 = select_led[1][c];
+                    led[idx0] = palette_bright[col];
+                    led[idx1] = palette_bright[col];
                 }
-            }
-            if (blink_p1) {
-                for (uint8_t c = 0; c < 4; c++) {
-                    uint8_t idx = select_led[1][c];
-                    uint8_t col = p2_sel_color[c];
-                    led[idx] = blink_on ? palette_bright[col] : palette[COLOR_BLACK];
+            } else {
+                /* Blink winners (or both if winning draw) */
+                uint8_t blink_p0 = (game_state == GS_P1_WIN) || (game_state == GS_DRAW && draw_winning);
+                uint8_t blink_p1 = (game_state == GS_P2_WIN) || (game_state == GS_DRAW && draw_winning);
+
+                if (blink_p0) {
+                    for (uint8_t c = 0; c < 4; c++) {
+                        uint8_t idx = select_led[0][c];
+                        uint8_t col = p1_sel_color[c];
+                        led[idx] = blink_on ? palette_bright[col] : palette[COLOR_BLACK];
+                    }
+                }
+                if (blink_p1) {
+                    for (uint8_t c = 0; c < 4; c++) {
+                        uint8_t idx = select_led[1][c];
+                        uint8_t col = p2_sel_color[c];
+                        led[idx] = blink_on ? palette_bright[col] : palette[COLOR_BLACK];
+                    }
                 }
             }
         }
