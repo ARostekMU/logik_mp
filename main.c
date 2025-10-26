@@ -72,7 +72,7 @@ static const struct cRGB palette_bright[COLOR_COUNT+1] = {
     WS2812_COLOR(30,0, 30),  // MAGENTA
 };
 
-/* Eval peg colors (after GRB fix these look correct) */
+/* Eval peg colors */
 #define EVAL_POS_COLOR  COLOR_RED      // exact position -> red
 #define EVAL_COL_COLOR  COLOR_YELLOW   // color-only     -> yellow
 
@@ -184,17 +184,24 @@ static inline uint8_t both_players_locked_row(void) {
 }
 
 static void commit_and_score_turn(void) {
-    /* Identity mapping: slot 0..3 -> column 0..3 */
+    /* Identity mapping: slot 0..3 -> column 0..3 (scoring order) */
     for (uint8_t col = 0; col < 4; col++) {
         boards[0].turns[current_turn].guess[col] = p1_sel_color[col];
         boards[1].turns[current_turn].guess[col] = p2_sel_color[col];
     }
 
-    /* Write guess LEDs in logical column order */
+    /* ---- DISPLAY writing (mirror P2) ----
+     * Player 1: show col 0..3 in the same order.
+     * Player 2: show col 0..3 mirrored as 3..0 so the opponent reads it naturally.
+     */
     for (uint8_t col = 0; col < 4; col++) {
+        // P1 display
         uint8_t idx0 = ledmap[0].guess_led[current_turn][col];
-        uint8_t idx1 = ledmap[1].guess_led[current_turn][col];
         led_color_codes[idx0] = boards[0].turns[current_turn].guess[col];
+
+        // P2 display (MIRRORED)
+        uint8_t disp_col1 = (CODE_LEN - 1) - col;               // 3 - col
+        uint8_t idx1 = ledmap[1].guess_led[current_turn][disp_col1];
         led_color_codes[idx1] = boards[1].turns[current_turn].guess[col];
     }
 
