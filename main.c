@@ -19,23 +19,23 @@ enum Color {
 // Dim palette (default look, lower brightness)
 static const struct cRGB palette[COLOR_COUNT+1] = {
     {0, 0, 0},      // black
-    {20, 0, 0},     // red (dim)
-    {0, 20, 0},     // green (dim)
-    {0, 0, 20},     // blue (dim)
-    {10, 10, 0},    // yellow (dim)
-    {0, 10, 10},    // cyan (dim)
-    {10, 0, 10},    // magenta (dim)
+    {15, 0, 0},     // red (dim)
+    {0, 15, 0},     // green (dim)
+    {0, 0, 15},     // blue (dim)
+    {7, 7, 0},    // yellow (dim)
+    {0, 7, 7},    // cyan (dim)
+    {7, 0, 7},    // magenta (dim)
 };
 
 // Bright palette (cursor highlight & locked-under-cursor, ~sum ≈ 40)
 static const struct cRGB palette_bright[COLOR_COUNT+1] = {
     {0, 0, 0},      // black
-    {40, 0, 0},     // red (bright)
-    {0, 40, 0},     // green (bright)
-    {0, 0, 40},     // blue (bright)
-    {20, 20, 0},    // yellow (bright)
-    {0, 20, 20},    // cyan (bright)
-    {20, 0, 20},    // magenta (bright)
+    {30, 0, 0},     // red (bright)
+    {0, 30, 0},     // green (bright)
+    {0, 0, 30},     // blue (bright)
+    {30, 30, 0},    // yellow (bright)
+    {0, 30, 30},    // cyan (bright)
+    {30, 0, 30},    // magenta (bright)
 };
 
 struct cRGB led[NUM_LEDS];
