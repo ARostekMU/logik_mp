@@ -359,7 +359,7 @@ int main(void) {
             }
             led[ select_led[1][player_2_slot] ] =
                 blink_on ? palette_bright[player_2_live_color]
-                         : palette[COLOR_BRIGHT[player_2_live_color]]; // <- fix below
+                         : palette[player_2_live_color];
         } else {
             uint8_t blink_p0 = (game_state == GS_P1_WIN) || (game_state == GS_DRAW && draw_winning);
             uint8_t blink_p1 = (game_state == GS_P2_WIN) || (game_state == GS_DRAW && draw_winning);
