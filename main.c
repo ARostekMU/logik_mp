@@ -9,6 +9,12 @@
 #define N_TURNS     6
 #define CODE_LEN    4
 
+/* ------------- GRB COLOR REMAP -------------
+ * Strip is GRB, but the code was assuming RGB.
+ * WS2812_COLOR(r,g,b) places values as {G,R,B} so the LEDs render correctly.
+ */
+#define WS2812_COLOR(r,g,b)  ((struct cRGB){ (g), (r), (b) })
+
 typedef struct {
     uint8_t guess[CODE_LEN];
     uint8_t n_pos;
@@ -45,19 +51,30 @@ enum Color {
     COLOR_MAGENTA,
 };
 
+/* Palettes corrected to GRB via WS2812_COLOR */
 static const struct cRGB palette[COLOR_COUNT+1] = {
-    {0, 0, 0}, {15, 0, 0}, {0, 15, 0}, {0, 0, 15},
-    {7, 7, 0}, {0, 7, 7}, {7, 0, 7},
+    WS2812_COLOR(0, 0, 0),   // BLACK
+    WS2812_COLOR(15,0, 0),   // RED
+    WS2812_COLOR(0, 15,0),   // GREEN
+    WS2812_COLOR(0, 0, 15),  // BLUE
+    WS2812_COLOR(7, 7, 0),   // YELLOW
+    WS2812_COLOR(0, 7, 7),   // CYAN
+    WS2812_COLOR(7, 0, 7),   // MAGENTA
 };
 
 static const struct cRGB palette_bright[COLOR_COUNT+1] = {
-    {0, 0, 0}, {30, 0, 0}, {0, 30, 0}, {0, 0, 30},
-    {30, 30, 0}, {0, 30, 30}, {30, 0, 30},
+    WS2812_COLOR(0, 0, 0),   // BLACK
+    WS2812_COLOR(30,0, 0),   // RED
+    WS2812_COLOR(0, 30,0),   // GREEN
+    WS2812_COLOR(0, 0, 30),  // BLUE
+    WS2812_COLOR(30,30,0),   // YELLOW
+    WS2812_COLOR(0, 30,30),  // CYAN
+    WS2812_COLOR(30,0, 30),  // MAGENTA
 };
 
-/* Make eval peg colors explicit */
-#define EVAL_POS_COLOR  COLOR_RED
-#define EVAL_COL_COLOR  COLOR_YELLOW
+/* Eval peg colors (after GRB fix these look correct) */
+#define EVAL_POS_COLOR  COLOR_RED      // exact position -> red
+#define EVAL_COL_COLOR  COLOR_YELLOW   // color-only     -> yellow
 
 struct cRGB led[NUM_LEDS];
 uint8_t led_color_codes[NUM_LEDS];
@@ -69,10 +86,10 @@ uint8_t player_1_locked_leds[4];
 uint8_t player_2_locked_leds[4];
 static uint8_t blink_on = 0;
 
-// Selection LED order (reversed display only — logic remains 0..3)
+// Selection LED order (display indices only)
 static const uint8_t select_led[N_PLAYERS][CODE_LEN] = {
-    {3, 2, 1, 0},          // Player 1 reversed
-    {103, 102, 101, 100}   // Player 2 reversed
+    {3, 2, 1, 0},          // Player 1 reversed display
+    {103, 102, 101, 100}   // Player 2 reversed display
 };
 static uint8_t p1_sel_color[4];
 static uint8_t p2_sel_color[4];
@@ -108,7 +125,7 @@ static void compute_feedback(const uint8_t secret_[CODE_LEN],
             pos++;
         }
     }
-    // Color-only matches (skip already exact-matched guess slots)
+    // Color-only matches
     for (uint8_t i = 0; i < CODE_LEN; i++) {
         if (used_g[i] || !guess[i]) continue;
         for (uint8_t j = 0; j < CODE_LEN; j++) {
@@ -153,6 +170,8 @@ static inline void update_player_selections(void) {
     player_2_slot = bucket_floor(read_adc_channel(4), 4);
     player_1_led_position = ledmap[0].guess_led[current_turn][player_1_slot];
     player_2_led_position = ledmap[1].guess_led[current_turn][player_2_slot];
+
+    // Colors 1..6 (no black) distributed over the pot range
     player_1_live_color = bucket_floor(read_adc_channel(3), COLOR_COUNT) + 1;
     player_2_live_color = bucket_floor(read_adc_channel(5), COLOR_COUNT) + 1;
 }
@@ -198,7 +217,6 @@ static void commit_and_score_turn(void) {
     else game_state = GS_PLAYING;
 }
 
-/* Render evaluations for all committed rows */
 static inline void render_evaluations(void) {
     for (uint8_t p = 0; p < N_PLAYERS; p++) {
         for (uint8_t row = 0; row <= current_turn; row++) {
@@ -208,11 +226,11 @@ static inline void render_evaluations(void) {
             uint8_t peg = 0;
             for (; peg < n_pos && peg < CODE_LEN; peg++) {
                 uint8_t idx = ledmap[p].eval_led[row][peg];
-                led[idx] = palette_bright[EVAL_POS_COLOR];   // Red
+                led[idx] = palette_bright[EVAL_POS_COLOR];   // bright red
             }
             for (; peg < (n_pos + n_col) && peg < CODE_LEN; peg++) {
                 uint8_t idx = ledmap[p].eval_led[row][peg];
-                led[idx] = palette_bright[EVAL_COL_COLOR];   // Yellow
+                led[idx] = palette_bright[EVAL_COL_COLOR];   // bright yellow
             }
             for (; peg < CODE_LEN; peg++) {
                 uint8_t idx = ledmap[p].eval_led[row][peg];
@@ -291,29 +309,25 @@ int main(void) {
             }
         }
 
-        /* ------- Base drawing: set all LEDs from codes ------- */
+        /* Base drawing from color codes */
         for (uint8_t i = 0; i < NUM_LEDS; i++) led[i] = palette[led_color_codes[i]];
 
         if (game_state == GS_PLAYING) {
-            // --- Player 1 selection LEDs ---
+            // Player 1 selection LEDs (display only)
             for (uint8_t s = 0; s < 4; s++) {
                 uint8_t idx = select_led[0][s];
-                if (player_1_locked_leds[s])
-                    led[idx] = palette[p1_sel_color[s]];
-                else
-                    led[idx] = palette[COLOR_BLACK];
+                led[idx] = player_1_locked_leds[s] ? palette[p1_sel_color[s]]
+                                                   : palette[COLOR_BLACK];
             }
             led[ select_led[0][player_1_slot] ] =
                 blink_on ? palette_bright[player_1_live_color]
                          : palette[player_1_live_color];
 
-            // --- Player 2 selection LEDs ---
+            // Player 2 selection LEDs
             for (uint8_t s = 0; s < 4; s++) {
                 uint8_t idx = select_led[1][s];
-                if (player_2_locked_leds[s])
-                    led[idx] = palette[p2_sel_color[s]];
-                else
-                    led[idx] = palette[COLOR_BLACK];
+                led[idx] = player_2_locked_leds[s] ? palette[p2_sel_color[s]]
+                                                   : palette[COLOR_BLACK];
             }
             led[ select_led[1][player_2_slot] ] =
                 blink_on ? palette_bright[player_2_live_color]
@@ -338,7 +352,7 @@ int main(void) {
             }
         }
 
-        /* ------- Render evaluations LAST so nothing overwrites them ------- */
+        /* Render evaluations last so nothing overwrites them */
         render_evaluations();
 
         ws2812_setleds(led, NUM_LEDS);
