@@ -46,8 +46,8 @@ enum Color {
 };
 
 static const struct cRGB palette[COLOR_COUNT+1] = {
-    {0, 0, 0}, {15, 0, 0}, {0, 15, 0}, {0, 0, 15},
-    {7, 7, 0}, {0, 7, 7}, {7, 0, 7},
+    {0, 0, 0}, {10, 0, 0}, {0, 10, 0}, {0, 0, 10},
+    {5, 5, 0}, {0, 5, 5}, {5, 0, 5},
 };
 
 static const struct cRGB palette_bright[COLOR_COUNT+1] = {
@@ -73,6 +73,15 @@ static const uint8_t select_led[N_PLAYERS][CODE_LEN] = {
 static uint8_t p1_sel_color[4];
 static uint8_t p2_sel_color[4];
 
+/* NEW: Map selection slot -> logical column (per player)
+ * The {0,2,1,3} swap fixes the “middle two positions swapped” issue seen as 2R/2Y.
+ * Adjust per player if needed (e.g., {0,1,2,3} for identity or {3,2,1,0} for full mirror).
+ */
+static const uint8_t slot_to_col[N_PLAYERS][CODE_LEN] = {
+    {0, 2, 1, 3},  // Player 1
+    {0, 2, 1, 3}   // Player 2
+};
+
 /* -------------------- ADC -------------------- */
 static inline void init_adc(void) {
     ADMUX |= (1 << REFS0) | (1 << ADLAR);
@@ -97,13 +106,14 @@ static void compute_feedback(const uint8_t secret_[CODE_LEN],
     uint8_t used_s[CODE_LEN] = {0}, used_g[CODE_LEN] = {0};
     uint8_t pos = 0, col = 0;
 
+    // Exact matches first
     for (uint8_t i = 0; i < CODE_LEN; i++) {
         if (guess[i] && guess[i] == secret_[i]) {
             used_s[i] = used_g[i] = 1;
             pos++;
         }
     }
-
+    // Color-only matches
     for (uint8_t i = 0; i < CODE_LEN; i++) {
         if (used_g[i] || !guess[i]) continue;
         for (uint8_t j = 0; j < CODE_LEN; j++) {
@@ -129,6 +139,7 @@ static inline void init_board_state(void) {
         }
     }
 
+    // Secret: R=1, G=2, B=3, Y=4
     secret[0] = 1; secret[1] = 2; secret[2] = 3; secret[3] = 4;
 
     for (uint8_t i = 0; i < 4; i++) {
@@ -159,11 +170,15 @@ static inline uint8_t both_players_locked_row(void) {
 }
 
 static void commit_and_score_turn(void) {
-    for (uint8_t col = 0; col < 4; col++) {
-        boards[0].turns[current_turn].guess[col] = p1_sel_color[col];
-        boards[1].turns[current_turn].guess[col] = p2_sel_color[col];
+    /* Store guesses using slot->column mapping, so scoring order matches visual intent */
+    for (uint8_t s = 0; s < 4; s++) {
+        uint8_t c0 = slot_to_col[0][s];
+        uint8_t c1 = slot_to_col[1][s];
+        boards[0].turns[current_turn].guess[c0] = p1_sel_color[s];
+        boards[1].turns[current_turn].guess[c1] = p2_sel_color[s];
     }
 
+    /* Also write guess LEDs by logical column so shown guess == scored guess */
     for (uint8_t col = 0; col < 4; col++) {
         uint8_t idx0 = ledmap[0].guess_led[current_turn][col];
         uint8_t idx1 = ledmap[1].guess_led[current_turn][col];
@@ -287,10 +302,10 @@ int main(void) {
 
         if (game_state == GS_PLAYING) {
             // --- Player 1 selection LEDs ---
-            for (uint8_t c = 0; c < 4; c++) {
-                uint8_t idx = select_led[0][c];
-                if (player_1_locked_leds[c])
-                    led[idx] = palette[p1_sel_color[c]]; // dim locked ones
+            for (uint8_t s = 0; s < 4; s++) {
+                uint8_t idx = select_led[0][s];
+                if (player_1_locked_leds[s])
+                    led[idx] = palette[p1_sel_color[s]]; // dim locked ones
                 else
                     led[idx] = palette[COLOR_BLACK];
             }
@@ -300,10 +315,10 @@ int main(void) {
                          : palette[player_1_live_color];
 
             // --- Player 2 selection LEDs ---
-            for (uint8_t c = 0; c < 4; c++) {
-                uint8_t idx = select_led[1][c];
-                if (player_2_locked_leds[c])
-                    led[idx] = palette[p2_sel_color[c]];
+            for (uint8_t s = 0; s < 4; s++) {
+                uint8_t idx = select_led[1][s];
+                if (player_2_locked_leds[s])
+                    led[idx] = palette[p2_sel_color[s]];
                 else
                     led[idx] = palette[COLOR_BLACK];
             }
