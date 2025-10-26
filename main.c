@@ -46,14 +46,18 @@ enum Color {
 };
 
 static const struct cRGB palette[COLOR_COUNT+1] = {
-    {0, 0, 0}, {10, 0, 0}, {0, 10, 0}, {0, 0, 10},
-    {5, 5, 0}, {0, 5, 5}, {5, 0, 5},
+    {0, 0, 0}, {15, 0, 0}, {0, 15, 0}, {0, 0, 15},
+    {7, 7, 0}, {0, 7, 7}, {7, 0, 7},
 };
 
 static const struct cRGB palette_bright[COLOR_COUNT+1] = {
     {0, 0, 0}, {30, 0, 0}, {0, 30, 0}, {0, 0, 30},
     {30, 30, 0}, {0, 30, 30}, {30, 0, 30},
 };
+
+/* Make eval peg colors explicit */
+#define EVAL_POS_COLOR  COLOR_RED
+#define EVAL_COL_COLOR  COLOR_YELLOW
 
 struct cRGB led[NUM_LEDS];
 uint8_t led_color_codes[NUM_LEDS];
@@ -65,22 +69,13 @@ uint8_t player_1_locked_leds[4];
 uint8_t player_2_locked_leds[4];
 static uint8_t blink_on = 0;
 
-// Selection LED order (reversed)
+// Selection LED order (reversed display only — logic remains 0..3)
 static const uint8_t select_led[N_PLAYERS][CODE_LEN] = {
     {3, 2, 1, 0},          // Player 1 reversed
     {103, 102, 101, 100}   // Player 2 reversed
 };
 static uint8_t p1_sel_color[4];
 static uint8_t p2_sel_color[4];
-
-/* NEW: Map selection slot -> logical column (per player)
- * The {0,2,1,3} swap fixes the “middle two positions swapped” issue seen as 2R/2Y.
- * Adjust per player if needed (e.g., {0,1,2,3} for identity or {3,2,1,0} for full mirror).
- */
-static const uint8_t slot_to_col[N_PLAYERS][CODE_LEN] = {
-    {0, 2, 1, 3},  // Player 1
-    {0, 2, 1, 3}   // Player 2
-};
 
 /* -------------------- ADC -------------------- */
 static inline void init_adc(void) {
@@ -113,7 +108,7 @@ static void compute_feedback(const uint8_t secret_[CODE_LEN],
             pos++;
         }
     }
-    // Color-only matches
+    // Color-only matches (skip already exact-matched guess slots)
     for (uint8_t i = 0; i < CODE_LEN; i++) {
         if (used_g[i] || !guess[i]) continue;
         for (uint8_t j = 0; j < CODE_LEN; j++) {
@@ -170,15 +165,13 @@ static inline uint8_t both_players_locked_row(void) {
 }
 
 static void commit_and_score_turn(void) {
-    /* Store guesses using slot->column mapping, so scoring order matches visual intent */
-    for (uint8_t s = 0; s < 4; s++) {
-        uint8_t c0 = slot_to_col[0][s];
-        uint8_t c1 = slot_to_col[1][s];
-        boards[0].turns[current_turn].guess[c0] = p1_sel_color[s];
-        boards[1].turns[current_turn].guess[c1] = p2_sel_color[s];
+    /* Identity mapping: slot 0..3 -> column 0..3 */
+    for (uint8_t col = 0; col < 4; col++) {
+        boards[0].turns[current_turn].guess[col] = p1_sel_color[col];
+        boards[1].turns[current_turn].guess[col] = p2_sel_color[col];
     }
 
-    /* Also write guess LEDs by logical column so shown guess == scored guess */
+    /* Write guess LEDs in logical column order */
     for (uint8_t col = 0; col < 4; col++) {
         uint8_t idx0 = ledmap[0].guess_led[current_turn][col];
         uint8_t idx1 = ledmap[1].guess_led[current_turn][col];
@@ -186,6 +179,7 @@ static void commit_and_score_turn(void) {
         led_color_codes[idx1] = boards[1].turns[current_turn].guess[col];
     }
 
+    /* Score */
     compute_feedback(secret, boards[0].turns[current_turn].guess,
                      &boards[0].turns[current_turn].n_pos, &boards[0].turns[current_turn].n_col);
     compute_feedback(secret, boards[1].turns[current_turn].guess,
@@ -204,6 +198,7 @@ static void commit_and_score_turn(void) {
     else game_state = GS_PLAYING;
 }
 
+/* Render evaluations for all committed rows */
 static inline void render_evaluations(void) {
     for (uint8_t p = 0; p < N_PLAYERS; p++) {
         for (uint8_t row = 0; row <= current_turn; row++) {
@@ -213,11 +208,11 @@ static inline void render_evaluations(void) {
             uint8_t peg = 0;
             for (; peg < n_pos && peg < CODE_LEN; peg++) {
                 uint8_t idx = ledmap[p].eval_led[row][peg];
-                led[idx] = palette_bright[COLOR_RED];
+                led[idx] = palette_bright[EVAL_POS_COLOR];   // Red
             }
             for (; peg < (n_pos + n_col) && peg < CODE_LEN; peg++) {
                 uint8_t idx = ledmap[p].eval_led[row][peg];
-                led[idx] = palette_bright[COLOR_YELLOW];
+                led[idx] = palette_bright[EVAL_COL_COLOR];   // Yellow
             }
             for (; peg < CODE_LEN; peg++) {
                 uint8_t idx = ledmap[p].eval_led[row][peg];
@@ -296,20 +291,18 @@ int main(void) {
             }
         }
 
-        /* ------- Drawing ------- */
+        /* ------- Base drawing: set all LEDs from codes ------- */
         for (uint8_t i = 0; i < NUM_LEDS; i++) led[i] = palette[led_color_codes[i]];
-        render_evaluations();
 
         if (game_state == GS_PLAYING) {
             // --- Player 1 selection LEDs ---
             for (uint8_t s = 0; s < 4; s++) {
                 uint8_t idx = select_led[0][s];
                 if (player_1_locked_leds[s])
-                    led[idx] = palette[p1_sel_color[s]]; // dim locked ones
+                    led[idx] = palette[p1_sel_color[s]];
                 else
                     led[idx] = palette[COLOR_BLACK];
             }
-            // current slot bright/blinking
             led[ select_led[0][player_1_slot] ] =
                 blink_on ? palette_bright[player_1_live_color]
                          : palette[player_1_live_color];
@@ -344,6 +337,9 @@ int main(void) {
                 }
             }
         }
+
+        /* ------- Render evaluations LAST so nothing overwrites them ------- */
+        render_evaluations();
 
         ws2812_setleds(led, NUM_LEDS);
 
